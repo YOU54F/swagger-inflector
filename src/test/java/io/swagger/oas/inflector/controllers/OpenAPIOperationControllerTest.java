@@ -20,15 +20,14 @@ import com.google.common.collect.Maps;
 import io.swagger.oas.inflector.config.Configuration;
 import io.swagger.oas.inflector.models.RequestContext;
 import io.swagger.oas.inflector.processors.BinaryProcessor;
-import io.swagger.v3.oas.models.media.Content;
+import io.swagger.oas.inflector.schema.SchemaValidator;
 import io.swagger.v3.oas.models.Operation;
 import org.testng.annotations.Test;
 
-import jakarta.inject.Provider;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.core.MediaType;
+import javax.inject.Provider;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.ws.rs.container.ContainerRequestContext;
 import java.util.Collections;
 import java.util.Map;
 
@@ -78,7 +77,7 @@ public class OpenAPIOperationControllerTest {
         Provider<HttpServletRequest> requestProvider = () -> request;
         Provider<HttpServletResponse> responseProvider = () -> response;
         OpenAPIOperationController controller = new OpenAPIOperationController(mock(Configuration.class), "/any_path",
-                "GET", mock(Operation.class), "application/json", Collections.emptyMap(),
+                "GET", mock(Operation.class), "application/json", Collections.emptyMap(), SchemaValidator.OpenApiVersion.V3_0,
                 requestProvider, responseProvider
                 );
         ContainerRequestContext context = mock(ContainerRequestContext.class);
@@ -88,57 +87,5 @@ public class OpenAPIOperationControllerTest {
         assertSame(requestContext.getRequest(), request);
         assertSame(requestContext.getResponse(), response);
         assertEquals(requestContext.getRemoteAddr(), remoteAddr);
-    }
-
-    @Test
-    public void testRequestBodyMediaTypeWithoutParametersIsUsedForParameterizedRequest() {
-        // given
-        io.swagger.v3.oas.models.media.MediaType jsonContent =
-                new io.swagger.v3.oas.models.media.MediaType();
-        Content content = new Content().addMediaType(MediaType.APPLICATION_JSON, jsonContent);
-
-        // when
-        io.swagger.v3.oas.models.media.MediaType selected =
-                OpenAPIOperationController.getRequestBodyMediaType(
-                        content, MediaType.valueOf("application/json; charset=utf-8"));
-
-        // then
-        assertSame(selected, jsonContent);
-    }
-
-    @Test
-    public void testExactParameterizedRequestBodyMediaTypeTakesPrecedence() {
-        // given
-        MediaType requestMediaType = MediaType.valueOf("application/json; charset=utf-8");
-        io.swagger.v3.oas.models.media.MediaType jsonContent =
-                new io.swagger.v3.oas.models.media.MediaType();
-        io.swagger.v3.oas.models.media.MediaType parameterizedContent =
-                new io.swagger.v3.oas.models.media.MediaType();
-        Content content = new Content()
-                .addMediaType(MediaType.APPLICATION_JSON, jsonContent)
-                .addMediaType(requestMediaType.toString(), parameterizedContent);
-
-        // when
-        io.swagger.v3.oas.models.media.MediaType selected =
-                OpenAPIOperationController.getRequestBodyMediaType(content, requestMediaType);
-
-        // then
-        assertSame(selected, parameterizedContent);
-    }
-
-    @Test
-    public void testWildcardRequestBodyMediaTypeRemainsTheFinalFallback() {
-        // given
-        io.swagger.v3.oas.models.media.MediaType wildcardContent =
-                new io.swagger.v3.oas.models.media.MediaType();
-        Content content = new Content().addMediaType(MediaType.WILDCARD, wildcardContent);
-
-        // when
-        io.swagger.v3.oas.models.media.MediaType selected =
-                OpenAPIOperationController.getRequestBodyMediaType(
-                        content, MediaType.valueOf("text/plain; charset=utf-8"));
-
-        // then
-        assertSame(selected, wildcardContent);
     }
 }

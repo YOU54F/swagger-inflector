@@ -80,8 +80,9 @@ public class OpenAPIInflector extends ResourceConfig {
     private String basePath;
     private String originalBasePath;
     private ServletContext servletContext;
-    private Map<String, List<String>> missingOperations = new HashMap<>();
-    private Set<String> unimplementedMappedModels = new TreeSet<>();
+    private SchemaValidator.OpenApiVersion openApiVersion = SchemaValidator.OpenApiVersion.V3_0;
+    private final Map<String, List<String>> missingOperations = new HashMap<>();
+    private final Set<String> unimplementedMappedModels = new TreeSet<>();
 
 
 
@@ -135,6 +136,10 @@ public class OpenAPIInflector extends ResourceConfig {
         }
         
         OpenAPI openAPI = swaggerParseResult.getOpenAPI();
+
+        if (openAPI != null) {
+            openApiVersion = SchemaValidator.parseOpenApiVersion(openAPI.getOpenapi());
+        }
 
         OpenAPI exposedAPI = getExposedAPI(config);
 
@@ -496,7 +501,7 @@ public class OpenAPIInflector extends ResourceConfig {
     }
 
     private OpenAPIOperationController createController(String pathString, String method, Operation operation, String mediaType, Map<String, Schema> definitions) {
-        OpenAPIOperationController controller = new OpenAPIOperationController(config, pathString, method, operation, mediaType, definitions);
+        OpenAPIOperationController controller = new OpenAPIOperationController(config, pathString, method, operation, mediaType, definitions, openApiVersion);
         if (controller.getMethod() == null) {
             if (controller.getMethodName() != null) {
                 List<String> missingMethods = missingOperations.get(controller.getControllerName());
