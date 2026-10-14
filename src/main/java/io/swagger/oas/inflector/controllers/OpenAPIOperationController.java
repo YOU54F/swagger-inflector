@@ -849,7 +849,7 @@ public class OpenAPIOperationController extends ReflectionUtils implements Infle
         switch (direction) {
             case INPUT:
                 if (config.getValidatePayloads().contains(Configuration.Direction.IN)
-                        && !SchemaValidator.validate(value, Json.pretty(schema), direction)) {
+                        && !SchemaValidator.validate(value, schemaJson(schema), direction)) {
                     throw new ApiException(new ApiError()
                             .code(config.getInvalidRequestStatusCode())
                             .message("Input does not match the expected structure"));
@@ -857,7 +857,7 @@ public class OpenAPIOperationController extends ReflectionUtils implements Infle
                 break;
             case OUTPUT:
                 if (config.getValidatePayloads().contains(Configuration.Direction.OUT)
-                        && !SchemaValidator.validate(value, Json.pretty(schema), direction)) {
+                        && !SchemaValidator.validate(value, schemaJson(schema), direction)) {
                     throw new ApiException(new ApiError()
                             .code(config.getInvalidRequestStatusCode())
                             .message("The server generated an invalid response"));
@@ -866,6 +866,15 @@ public class OpenAPIOperationController extends ReflectionUtils implements Infle
         }
     }
     
+    // OAS 3.1 schemas keep their type set in Schema.types, const etc., which only the Json31
+    // mapper serializes; Json.pretty() silently drops them, so type checks became no-ops.
+    private static String schemaJson(Object schema) {
+        if (schema instanceof Schema && ((Schema) schema).getSpecVersion() == io.swagger.v3.oas.models.SpecVersion.V31) {
+            return io.swagger.v3.core.util.Json31.pretty(schema);
+        }
+        return Json.pretty(schema);
+    }
+
     private ControllerFactory getControllerFactory() {
     	if (controllerFactoryCache == null){
     		controllerFactoryCache = config.getControllerFactory();
