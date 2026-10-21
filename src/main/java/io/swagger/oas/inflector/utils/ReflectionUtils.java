@@ -176,8 +176,37 @@ public class ReflectionUtils {
     }
 
 
+    /**
+     * OAS 3.1: swagger-parser leaves Schema.type null and populates Schema.types
+     * (a JSON Schema 2020-12 type set) and builds generic JsonSchema instances instead
+     * of StringSchema/ObjectSchema/etc. Resolve a single effective type, ignoring "null".
+     */
+    static String resolveType(Schema schema) {
+        if (schema == null) {
+            return null;
+        }
+        if (schema.getType() != null) {
+            return schema.getType();
+        }
+        Set<String> types = schema.getTypes();
+        if (types != null) {
+            for (String t : types) {
+                if (t != null && !"null".equals(t)) {
+                    return t;
+                }
+            }
+        }
+        return null;
+    }
+
     public JavaType getTypeFromProperty(String type, String format, Schema property, Map<String, Schema> definitions) {
         TypeFactory tf = Json.mapper().getTypeFactory();
+        if (type == null && property != null) {
+            type = resolveType(property);
+            if (format == null) {
+                format = property.getFormat();
+            }
+        }
 
         if(property instanceof ArraySchema) {
             ArraySchema arraySchema = (ArraySchema)property;
@@ -204,7 +233,12 @@ public class ReflectionUtils {
             }
         }
         if("array".equals(type)) {
-            JavaType innerType = getTypeFromProperty(null, null, property, definitions);
+            // OAS 3.1 arrays are not ArraySchema instances; recurse into items, not the array itself
+            Schema items = property.getItems() != null ? property.getItems() : property;
+            JavaType innerType = items == property ? null : getTypeFromProperty(null, null, items, definitions);
+            if (innerType == null) {
+                innerType = tf.constructType(JsonNode.class);
+            }
             return tf.constructCollectionType(List.class, innerType);
         }
         if(("byte".equals(type)) || property instanceof ByteArraySchema) {
@@ -256,7 +290,7 @@ public class ReflectionUtils {
             LOGGER.warn("falling back to `string` with format `" + format + "`");
             return tf.constructType(String.class);
         }
-        if(property instanceof ObjectSchema) {
+        if(property instanceof ObjectSchema || "object".equals(type)) {
             String name = null;
             if (property.getExtensions() != null) {
                 name = (String) property.getExtensions().get(Constants.X_SWAGGER_ROUTER_MODEL);

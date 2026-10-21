@@ -123,6 +123,7 @@ public class ExampleBuilder {
         if (property == null) {
             return null;
         }
+        property = downgradeOas31(property);
         if (property.getReadOnly() != null && property.getReadOnly() && requestType == RequestType.WRITE) {
             return null;
         }
@@ -541,6 +542,78 @@ public class ExampleBuilder {
         return output;
     }
 
+
+    /**
+     * OAS 3.1: swagger-parser builds generic JsonSchema instances (type in getTypes(), examples
+     * in getExamples()), but this builder dispatches on StringSchema/ObjectSchema/etc. Rewrite the
+     * schema tree as 3.0 JSON and let the 3.0 ModelDeserializer rebuild typed subclasses.
+     */
+    static Schema downgradeOas31(Schema property) {
+        if (property.getSpecVersion() != io.swagger.v3.oas.models.SpecVersion.V31) {
+            return property;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = io.swagger.v3.core.util.Json31.mapper().valueToTree(property);
+            downgradeNode(node);
+            return io.swagger.v3.core.util.Json.mapper().treeToValue(node, Schema.class);
+        } catch (Exception e) {
+            LOGGER.warn("unable to downgrade OAS 3.1 schema for example generation", e);
+            return property;
+        }
+    }
+
+    private static void downgradeNode(com.fasterxml.jackson.databind.JsonNode node) {
+        if (node instanceof com.fasterxml.jackson.databind.node.ArrayNode) {
+            for (com.fasterxml.jackson.databind.JsonNode child : node) {
+                downgradeNode(child);
+            }
+            return;
+        }
+        if (!(node instanceof com.fasterxml.jackson.databind.node.ObjectNode)) {
+            return;
+        }
+        com.fasterxml.jackson.databind.node.ObjectNode obj = (com.fasterxml.jackson.databind.node.ObjectNode) node;
+        com.fasterxml.jackson.databind.JsonNode type = obj.get("type");
+        if (type != null && type.isArray()) {
+            String single = null;
+            boolean nullable = false;
+            for (com.fasterxml.jackson.databind.JsonNode t : type) {
+                if ("null".equals(t.asText())) {
+                    nullable = true;
+                } else if (single == null) {
+                    single = t.asText();
+                }
+            }
+            if (single != null) {
+                obj.put("type", single);
+            } else {
+                obj.remove("type");
+            }
+            if (nullable) {
+                obj.put("nullable", true);
+            }
+        }
+        com.fasterxml.jackson.databind.JsonNode examples = obj.get("examples");
+        if (examples != null && examples.isArray() && examples.size() > 0 && !obj.has("example")) {
+            obj.set("example", examples.get(0));
+        }
+        if (obj.has("const") && !obj.has("example")) {
+            obj.set("example", obj.get("const"));
+        }
+        if (obj.has("const") && !obj.has("type")) {
+            com.fasterxml.jackson.databind.JsonNode c = obj.get("const");
+            obj.put("type", c.isTextual() ? "string" : c.isIntegralNumber() ? "integer" : c.isNumber() ? "number" : c.isBoolean() ? "boolean" : "object");
+        }
+        java.util.Iterator<java.util.Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> it = obj.fields();
+        while (it.hasNext()) {
+            Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> e = it.next();
+            // don't rewrite literal values
+            if (!"example".equals(e.getKey()) && !"examples".equals(e.getKey()) && !"const".equals(e.getKey())
+                    && !"enum".equals(e.getKey()) && !"default".equals(e.getKey())) {
+                downgradeNode(e.getValue());
+            }
+        }
+    }
 
     public static void mergeTo(ObjectExample output, List<Example> examples) {
         for(Example ex : examples) {

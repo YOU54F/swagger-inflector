@@ -78,7 +78,7 @@ public class OpenAPIOperationControllerTest {
         Provider<HttpServletRequest> requestProvider = () -> request;
         Provider<HttpServletResponse> responseProvider = () -> response;
         OpenAPIOperationController controller = new OpenAPIOperationController(mock(Configuration.class), "/any_path",
-                "GET", mock(Operation.class), "application/json", Collections.emptyMap(),
+                "GET", mock(Operation.class), "application/json", Collections.emptyMap(), io.swagger.oas.inflector.schema.SchemaValidator.OpenApiVersion.V3_0,
                 requestProvider, responseProvider
                 );
         ContainerRequestContext context = mock(ContainerRequestContext.class);
